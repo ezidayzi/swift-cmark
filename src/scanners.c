@@ -14054,3 +14054,32 @@ bufsize_t _scan_footnote_definition(const unsigned char *p) {
     { return (bufsize_t)(p - start); }
   }
 }
+
+// TODO: - Json 블록 스캐너 작성
+bufsize_t _scan_open_json_block(const unsigned char *p, size_t len) {
+  const unsigned char *start = p;
+
+  // 최소 길이 "<json>" 체크
+  if (len < 6 || strncmp((const char *)p, "<json>", 6) != 0) {
+    return 0;
+  }
+
+  p += 6;
+
+  // 성공: 시작 태그 길이 반환
+  return (bufsize_t)(p - start);
+}
+
+bufsize_t _scan_close_json_block(const unsigned char *p, size_t len) {
+  const unsigned char *start = p;
+
+  // 최소 길이 "</json>" 체크
+  if (len < 7 || strncmp((const char *)p, "</json>", 7) != 0) {
+    return 0;
+  }
+
+  p += 7;
+
+  // 성공: 종료 태그 길이 반환
+  return (bufsize_t)(p - start);
+}

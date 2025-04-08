@@ -348,6 +348,9 @@ static cmark_node *finalize(cmark_parser *parser, cmark_node *b) {
     }
     break;
   }
+      
+  case CMARK_NODE_JSON_BLOCK:
+      b->as.literal = cmark_chunk_buf_detach(node_content);
 
   case CMARK_NODE_CODE_BLOCK:
     if (!b->as.code.fenced) { // indented code
@@ -719,6 +722,7 @@ cmark_node *cmark_parse_document(const char *buffer, size_t len, int options) {
   return document;
 }
 
+/// 진입점
 void cmark_parser_feed(cmark_parser *parser, const char *buffer, size_t len) {
   S_parser_feed(parser, (const unsigned char *)buffer, len, false);
 }
@@ -953,6 +957,23 @@ static bool parse_block_quote_prefix(cmark_parser *parser, cmark_chunk *input) {
   return res;
 }
 
+static bool parse_json_block_prefix(cmark_parser *parser, cmark_chunk *input) {
+  if (parser->indent > 3) {
+    return false;
+  }
+
+  const unsigned char *ptr = input->data + parser->first_nonspace;
+  bufsize_t len = input->len - parser->first_nonspace;
+
+  if (len >= 6 && strncmp((const char *)ptr, "<json>", 6) == 0) {
+    S_advance_offset(parser, input, parser->first_nonspace + 6 - parser->offset, false);
+    return true;
+  }
+
+  return false;
+}
+
+
 static bool parse_footnote_definition_block_prefix(cmark_parser *parser, cmark_chunk *input,
                                                    cmark_node *container) {
   if (parser->indent >= 4) {
@@ -1102,6 +1123,10 @@ static cmark_node *check_open_blocks(cmark_parser *parser, cmark_chunk *input,
       if (!parse_block_quote_prefix(parser, input))
         goto done;
       break;
+    case CMARK_NODE_JSON_BLOCK:
+        if (!parse_json_block_prefix(parser, input))
+          goto done;
+        break;
     case CMARK_NODE_ITEM:
       if (!parse_node_item_prefix(parser, input, container))
         goto done;
@@ -1144,6 +1169,7 @@ done:
   return container;
 }
 
+/// TODO: - 새로운 블록 정의 (block 타입 추가)
 static void open_new_blocks(cmark_parser *parser, cmark_node **container,
                             cmark_chunk *input, bool all_matched) {
   bool indented;
@@ -1164,7 +1190,11 @@ static void open_new_blocks(cmark_parser *parser, cmark_node **container,
     S_find_first_nonspace(parser, input);
     indented = parser->indent >= CODE_INDENT;
 
-    if (!indented && peek_at(input, parser->first_nonspace) == '>') {
+    if (!indented && strncmp((const char *)(input->data + parser->first_nonspace), "<json>", 6) == 0) {
+      *container = add_child(parser, *container, CMARK_NODE_JSON_BLOCK,
+                             parser->first_nonspace + 1);
+      S_advance_offset(parser, input, parser->first_nonspace + 6 - parser->offset, false);
+    } else if (!indented && peek_at(input, parser->first_nonspace) == '>') {
 
       bufsize_t blockquote_startpos = parser->first_nonspace;
 
@@ -1381,7 +1411,7 @@ static void add_text_to_container(cmark_parser *parser, cmark_node *container,
   // on an empty list item.
   const cmark_node_type ctype = S_type(container);
   const bool last_line_blank =
-      (parser->blank && ctype != CMARK_NODE_BLOCK_QUOTE &&
+      (parser->blank && ctype != CMARK_NODE_BLOCK_QUOTE && ctype != CMARK_NODE_JSON_BLOCK &&
        ctype != CMARK_NODE_HEADING && ctype != CMARK_NODE_THEMATIC_BREAK &&
        !(ctype == CMARK_NODE_CODE_BLOCK && container->as.code.fenced) &&
        !(ctype == CMARK_NODE_ITEM && container->first_child == NULL &&
@@ -1412,7 +1442,9 @@ static void add_text_to_container(cmark_parser *parser, cmark_node *container,
       assert(parser->current != NULL);
     }
 
-    if (S_type(container) == CMARK_NODE_CODE_BLOCK) {
+    if (S_type(container) == CMARK_NODE_JSON_BLOCK) {
+      add_line(container, input, parser);
+    } else if (S_type(container) == CMARK_NODE_CODE_BLOCK) {
       add_line(container, input, parser);
     } else if (S_type(container) == CMARK_NODE_HTML_BLOCK) {
       add_line(container, input, parser);
@@ -1554,6 +1586,7 @@ finished:
   cmark_strbuf_clear(&parser->curline);
 }
 
+/// BlockNode 반환점
 cmark_node *cmark_parser_finish(cmark_parser *parser) {
   cmark_node *res;
   cmark_llist *extensions;
