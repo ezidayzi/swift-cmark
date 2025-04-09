@@ -14073,13 +14073,24 @@ bufsize_t _scan_open_json_block(const unsigned char *p, size_t len) {
 bufsize_t _scan_close_json_block(const unsigned char *p, size_t len) {
   const unsigned char *start = p;
 
-  // 최소 길이 "</json>" 체크
   if (len < 7 || strncmp((const char *)p, "</json>", 7) != 0) {
     return 0;
   }
 
   p += 7;
+  len -= 7;
 
-  // 성공: 종료 태그 길이 반환
-  return (bufsize_t)(p - start);
+  // 공백/탭 건너뛰기
+  while (len > 0 && (*p == ' ' || *p == '\t')) {
+    ++p;
+    --len;
+  }
+
+  // 줄 끝이면 유효한 종료
+  if (len == 0 || *p == '\n' || *p == '\r') {
+    return (bufsize_t)(p - start);
+  }
+
+  // 그 외 글자 있으면 종료 아님
+  return 0;
 }

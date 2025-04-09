@@ -957,20 +957,41 @@ static bool parse_block_quote_prefix(cmark_parser *parser, cmark_chunk *input) {
   return res;
 }
 
-static bool parse_json_block_prefix(cmark_parser *parser, cmark_chunk *input) {
-  if (parser->indent > 3) {
-    return false;
+static bool parse_json_block_prefix(cmark_parser *parser,
+                                    cmark_chunk *input,
+                                    cmark_node *container,
+                                    bool *should_continue) {
+  bool res = false;
+
+  if (!container) {
+    // 아직 블록 시작 안 함: <json> 감지
+    const unsigned char *ptr = input->data + parser->first_nonspace;
+    bufsize_t len = input->len - parser->first_nonspace;
+
+    if (parser->indent <= 3 &&
+        len >= 6 &&
+        strncmp((const char *)ptr, "<json>", 6) == 0) {
+      S_advance_offset(parser, input, parser->first_nonspace + 6 - parser->offset, false);
+      res = true;
+    }
+  } else {
+    // 이미 JSON 블록 안에 있음
+    bufsize_t matched = _scan_close_json_block(
+        input->data + parser->first_nonspace,
+        input->len - parser->first_nonspace
+    );
+
+    if (matched > 0) {
+      *should_continue = false; // 종료 신호
+      S_advance_offset(parser, input, matched, false);
+      parser->current = finalize(parser, container);
+      res = true;
+    } else {
+      res = true; // 여전히 블록 유지 중
+    }
   }
 
-  const unsigned char *ptr = input->data + parser->first_nonspace;
-  bufsize_t len = input->len - parser->first_nonspace;
-
-  if (len >= 6 && strncmp((const char *)ptr, "<json>", 6) == 0) {
-    S_advance_offset(parser, input, parser->first_nonspace + 6 - parser->offset, false);
-    return true;
-  }
-
-  return false;
+  return res;
 }
 
 
@@ -1124,7 +1145,7 @@ static cmark_node *check_open_blocks(cmark_parser *parser, cmark_chunk *input,
         goto done;
       break;
     case CMARK_NODE_JSON_BLOCK:
-        if (!parse_json_block_prefix(parser, input))
+        if (!parse_json_block_prefix(parser, input, container, &should_continue))
           goto done;
         break;
     case CMARK_NODE_ITEM:

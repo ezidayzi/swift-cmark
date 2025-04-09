@@ -35,6 +35,8 @@ bufsize_t _scan_close_code_fence(const unsigned char *p);
 bufsize_t _scan_entity(const unsigned char *p);
 bufsize_t _scan_dangerous_url(const unsigned char *p);
 bufsize_t _scan_footnote_definition(const unsigned char *p);
+bufsize_t _scan_open_json_block(const unsigned char *p, size_t len);
+bufsize_t _scan_close_json_block(const unsigned char *p, size_t len);
 
 #define scan_scheme(c, n) _scan_at(&_scan_scheme, c, n)
 #define scan_autolink_uri(c, n) _scan_at(&_scan_autolink_uri, c, n)
